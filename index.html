@@ -510,7 +510,13 @@ footer{
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
 <script>
+  const SUPABASE_URL = "https://uozjypazlvvdboqiojr.supabase.co";
+const SUPABASE_ANON_KEY = "Sb_publishable_PPC4p6TuVa6MccnthOmd6w_9Ck6Juyb";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const ADMIN_PASS='sarfraz786';
 function toggleNav(){document.getElementById('navLinks').classList.toggle('open');}
 function scrollTo(id){document.getElementById(id).scrollIntoView({behavior:'smooth'});}
@@ -530,23 +536,41 @@ function switchTab(tab,btn){
   document.querySelectorAll('.gtab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');renderGallery();
 }
-function getMedia(){try{return JSON.parse(localStorage.getItem('sa_media')||'{"images":[],"videos":[]}')}catch(e){return{images:[],videos:[]};}}
-function saveMedia(d){localStorage.setItem('sa_media',JSON.stringify(d));}
-function renderGallery(){
-  const d=getMedia();
-  const ig=document.getElementById('gimg'),vg=document.getElementById('gvid');
-  const ei=document.getElementById('gempty-img'),ev=document.getElementById('gempty-vid');
-  if(d.images.length===0){ig.innerHTML='';ei.style.display='block';}
-  else{
-    ei.style.display='none';
-    ig.innerHTML=d.images.map((img,i)=>`<div class="gitem" onclick="openLightbox('${img.src}')" style="position:relative;"><img src="${img.src}" style="width:100%;height:100%;object-fit:cover;border-radius:5px;">${img.caption?`<div style="position:absolute;bottom:0;left:0;right:0;padding:6px 8px;background:rgba(0,0,0,.65);font-size:11px;color:#ccc;">${img.caption}</div>`:''}</div>`).join('');
+// کلاؤڈ سے تصاویر اور ویڈیوز کا ڈیٹا حاصل کرنے کا نیا فنکشن
+async function getCloudMedia() {
+  const { data, error } = await supabaseClient
+    .from('gallery_media')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('ڈیٹا لانے میں مسئلہ:', error.message);
+    return { images: [], videos: [] };
   }
-  if(d.videos.length===0){vg.innerHTML='';ev.style.display='block';}
-  else{
-    ev.style.display='none';
-    vg.innerHTML=d.videos.map((v,i)=>`<div class="gitem" onclick="window.open('${v.url}','_blank')"><div class="gi">&#9654;&#65039;</div><div class="gl">${v.caption||'Video '+(i+1)}</div></div>`).join('');
+
+  const images = data.filter(item => item.media_type === 'image');
+  const videos = data.filter(item => item.media_type === 'video');
+  return { images, videos };
+  }
+  
+async function renderGallery() {
+  const d = await getCloudMedia();
+  const ig = document.getElementById('gimg'), vg = document.getElementById('gvid');
+  const ei = document.getElementById('gempty-img'), ev = document.getElementById('gempty-vid');
+  
+  if (d.images.length === 0) { ig.innerHTML = ''; ei.style.display = 'block'; }
+  else {
+    ei.style.display = 'none';
+    ig.innerHTML = d.images.map(img => `<div class="gitem" onclick="openLightbox('${img.media_url}')" style="position:relative"><img src="${img.media_url}"><p>${img.caption || ''}</p></div>`).join('');
+  }
+  
+  if (d.videos.length === 0) { vg.innerHTML = ''; ev.style.display = 'block'; }
+  else {
+    ev.style.display = 'none';
+    vg.innerHTML = d.videos.map(v => `<div class="gitem" onclick="window.open('${v.media_url}','_blank')"><video src="${v.media_url}" controls></video><p>${v.caption || ''}</p></div>`).join('');
   }
 }
+
 function openLightbox(src){document.getElementById('lbImg').src=src;document.getElementById('lightbox').classList.add('open');document.body.style.overflow='hidden';}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open');document.body.style.overflow='';}
 let adminUnlocked=false;
