@@ -586,44 +586,75 @@ function checkAdmin(){
     document.getElementById('loginErr').style.display='none';renderAdminList();
   } else {document.getElementById('loginErr').style.display='block';}
 }
-function addImages(){
-  const files=document.getElementById('imgUpload').files;
-  const cap=document.getElementById('imgCaption').value.trim();
-  if(!files.length){alert('پہلے تصویر select کریں!');return;}
-  const d=getMedia();let loaded=0;
-  Array.from(files).forEach(file=>{
-    const r=new FileReader();
-    r.onload=e=>{d.images.push({src:e.target.result,caption:cap});loaded++;
-      if(loaded===files.length){saveMedia(d);renderGallery();renderAdminList();
-        document.getElementById('imgUpload').value='';document.getElementById('imgCaption').value='';
-        alert('✅ '+loaded+' تصویر add ہو گئی!');}
-    };r.readAsDataURL(file);
-  });
+async function addImages() {
+  const fileInput = document.getElementById('imgUpload');
+  const capInput = document.getElementById('imgCaption');
+  if (!fileInput || !fileInput.files.length) return alert('پہلے تصویر select کریں!');
+
+  const file = fileInput.files[0];
+  const fileName = `${Date.now()}_${file.name}`;
+
+  const { data: uploadData, error: uploadError } = await supabaseClient.storage
+    .from('gallery')
+    .upload(fileName, file);
+
+  if (uploadError) return alert('اپلوڈ فیل: ' + uploadError.message);
+
+  const { data: urlData } = supabaseClient.storage.from('gallery').getPublicUrl(fileName);
+
+  await supabaseClient.from('gallery_media').insert([
+    { media_url: urlData.publicUrl, media_type: 'image', caption: capInput.value.trim() }
+  ]);
+
+  alert('✅ تصویر کامیابی سے کلاؤڈ پر ایڈ ہو گئی!');
+  fileInput.value = '';
+  if (capInput) capInput.value = '';
+  renderGallery();
+  renderAdminList();
 }
-function addVideo(){
-  const url=document.getElementById('vidUrl').value.trim();
-  const cap=document.getElementById('vidCaption').value.trim();
-  if(!url){alert('Link درج کریں!');return;}
-  const d=getMedia();d.videos.push({url,caption:cap});saveMedia(d);
-  renderGallery();renderAdminList();
-  document.getElementById('vidUrl').value='';document.getElementById('vidCaption').value='';
+
+async function addVideo() {
+  const urlInput = document.getElementById('vidUrl');
+  const capInput = document.getElementById('vidCaption');
+  if (!urlInput || !urlInput.value.trim()) return alert('Link درج کریں!');
+
+  await supabaseClient.from('gallery_media').insert([
+    { media_url: urlInput.value.trim(), media_type: 'video', caption: capInput.value.trim() }
+  ]);
+
   alert('✅ Video add ہو گئی!');
+  urlInput.value = '';
+  if (capInput) capInput.value = '';
+  renderGallery();
+  renderAdminList();
 }
-function deleteMedia(type,i){
-  if(!confirm('Delete کریں؟'))return;
-  const d=getMedia();d[type].splice(i,1);saveMedia(d);renderGallery();renderAdminList();
+
+async function deleteMedia(type, id) {
+  if (!confirm('Delete کریں؟')) return;
+  const { error } = await supabaseClient.from('gallery_media').delete().eq('id', id);
+  if (error) return alert('مٹانے میں مسئلہ آیا: ' + error.message);
+  renderGallery();
+  renderAdminList();
 }
-function clearAll(){
-  if(!confirm('سب media delete کریں؟'))return;
-  saveMedia({images:[],videos:[]});renderGallery();renderAdminList();
+
+function clearAll() {
+  alert('سیکیورٹی کی وجہ سے سب کچھ ایک ساتھ مٹانے کی اجازت نہیں ہے۔ آپ ایک ایک کر کے مٹا سکتے ہیں۔');
 }
-function renderAdminList(){
-  const d=getMedia();
-  let h='';
-  d.images.forEach((img,i)=>{h+=`<div style="display:flex;align-items:center;gap:12px;background:#0a1829;padding:10px 14px;border-radius:4px;border:1px solid var(--border);"><img src="${img.src}" style="width:40px;height:40px;object-fit:cover;border-radius:3px;flex-shrink:0;"><span style="flex:1;font-size:12px;color:var(--light);">${img.caption||'Image '+(i+1)}</span><button onclick="deleteMedia('images',${i})" style="background:none;border:none;color:#e55;cursor:pointer;font-size:18px;">&#128465;</button></div>`;});
-  d.videos.forEach((v,i)=>{h+=`<div style="display:flex;align-items:center;gap:12px;background:#0a1829;padding:10px 14px;border-radius:4px;border:1px solid var(--border);"><div style="width:40px;height:40px;background:var(--card);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">&#9654;</div><span style="flex:1;font-size:12px;color:var(--light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.caption||v.url}</span><button onclick="deleteMedia('videos',${i})" style="background:none;border:none;color:#e55;cursor:pointer;font-size:18px;">&#128465;</button></div>`;});
-  document.getElementById('adminMediaList').innerHTML=h||'<div style="text-align:center;color:#3a5a7a;padding:20px;">ابھی کوئی media نہیں</div>';
+
+async function renderAdminList() {
+  const d = await getCloudMedia();
+  const list = document.getElementById('adminMediaList');
+  if (!list) return;
+  let h = '';
+  d.images.forEach(img => {
+    h += `<div style="display:flex;align-items:center;gap:12px;background:#0a1829;padding:10px 14px;border-radius:4px;margin-bottom:8px;"><img src="${img.media_url}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;"> <span style="flex:1;color:#fff;">${img.caption || 'No Caption'}</span> <button onclick="deleteMedia('image', ${img.id})" style="background:#fe5555;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">Delete</button></div>`;
+  });
+  d.videos.forEach(v => {
+    h += `<div style="display:flex;align-items:center;gap:12px;background:#0a1829;padding:10px 14px;border-radius:4px;margin-bottom:8px;"><video src="${v.media_url}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;"></video> <span style="flex:1;color:#fff;">${v.caption || 'No Caption'}</span> <button onclick="deleteMedia('video', ${v.id})" style="background:#fe5555;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">Delete</button></div>`;
+  });
+  list.innerHTML = h || '<div style="text-align:center;color:#3a5a7a;padding:20px;">کوئی میڈیا موجود نہیں ہے</div>';
 }
+
 document.addEventListener('DOMContentLoaded',renderGallery);
 </script>
 </body>
